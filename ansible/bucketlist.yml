@@ -9,11 +9,23 @@
   - name: Install nginx, postgres and uwsgi
     apt:
       name: "{{ item }}"
-      state: installed
+      state: present
     with_items:
     - nginx
     - postgresql
     - uwsgi
+  
+  - name: Start nginx, postgresql and uwsgi
+    service: 
+      name: "{{ item }}" 
+      state: started 
+      enabled: true
+    with_items:
+    - nginx
+    - postgresql
+    - uwsgi
+    become: yes
+    become_user: root
 
   - name: Configure nginx
     template:
@@ -24,12 +36,22 @@
   
   - name: Add bucketlist to site-enabled
     file:
-      path=/etc/nginx/sites-available/bucketlist
-      src=/etc/nginx/sites-enabled
+      path=/etc/nginx/sites-enabled
+      src=/etc/nginx/sites-available/bucketlist
       state=link
       force=yes
     become: yes
     become_user: root
+    notify:
+      - Restart uwsgi
+      - Restart nginx
+  
+  - name: Copy Postgres configurations
+    template: src=templates/pg_hba.conf dest=/etc/postgresql/9.3/main/pg_hba.conf
+    become: yes
+    become_user: root
+    notify:
+      - Restart postgres
   
   - name: Create symlink to nodejs
     file:
@@ -39,17 +61,7 @@
       force=yes
     become: yes
     become_user: root
-
-  - name: Start nginx, postgresql and uwsgi
-    service: 
-      name: "{{ item }}" 
-      state: started 
-      enabled: true
-    with_items:
-    - nginx
-    - postgresql
-    - uwsgi
-  
+ 
   - name: Create app folder
     file:
       path: app/
@@ -64,9 +76,14 @@
     become: yes
     become_user: root
   
-  - name: Copy app.ini and wsgi.py configurations to virtual machine
+  - name: Copy app.ini configurations to virtual machine
     template:
       src=templates/app.ini dest=/home/vagrant/app/app.ini
+    become: yes
+    become_user: root
+  
+  - name: Copy wsgi.py configurations to virtual machine
+    template:
       src=templates/wsgi.py dest=/home/vagrant/app/wsgi.py
     become: yes
     become_user: root
@@ -77,14 +94,7 @@
       chdir: app/
     become: yes
     become_user: root
-
-  - name: Copy Postgres configurations
-    template: src=templates/pg_hba.conf dest=/etc/postgresql/9.3/main/pg_hba.conf
-    become: yes
-    become_user: root
-    notify:
-      - Restart postgres
-
+  
   - name: Create Postgres DB
     postgresql_db:
       name: bucketlist_dev
@@ -124,7 +134,15 @@
     args:
       chdir: app/
       executable: /bin/bash
+    become: yes
+    become_user: root
 
   handlers:
     - name: Restart postgres
       service: name=postgresql state=restarted
+    
+    - name: Restart uwsgi
+      service: name=uwsgi state=restarted
+    
+    - name: Restart nginx
+      service: name=nginx state=restarted
