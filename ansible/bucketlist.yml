@@ -1,0 +1,106 @@
+---
+- hosts: bucketlist
+  remote_user: root
+  tasks:
+  - name: Install nginx, postgres and uwsgi
+    apt:
+      name: "{{ item }}"
+      state: installed
+    with_items:
+    - nginx
+    - postgresql
+    - uwsgi
+
+  - name: Configure nginx
+    template:
+      src: templates/bucketlist
+      dest: /etc/nginx/sites-available/bucketlist
+    become: yes
+    become_user: root
+  
+  - name: Add bucketlist to site-enabled
+    file:
+      path=/etc/nginx/sites-available/bucketlist
+      src=/etc/nginx/sites-enabled
+      state=link
+      force=yes
+    become: yes
+    become_user: root
+
+  - name: Start nginx, postgresql and uwsgi
+    service: 
+      name: "{{ item }}" 
+      state: started 
+      enabled: true
+    with_items:
+    - nginx
+    - postgresql
+    - uwsgi
+  
+  - name: Create app folder
+    file:
+      path: app/
+      state: directory
+      mode: 0755
+      owner: vagrant
+
+  - name: Clone the bucketlist app from github
+    git:
+      repo: https://github.com/SProjects/bucketlist_andela.git
+      dest: app/
+    become: yes
+    become_user: root
+  
+  - name: Copy configuration files to virtual machine
+    template:
+      src=templates/app.ini dest=/app/app.ini
+      src=templates/wsgi.py dest=/app/wsgi.py
+    become: yes
+    become_user: root
+
+  - name: Install requirements
+    command: pip install -r requirements.txt
+    args:
+      chdir: app/
+    become: yes
+    become_user: root
+
+  - name: Copy Postgres configurations
+    template: src=templates/pg_hba.conf dest=/etc/postgresql/9.3/main/pg_hba.conf
+    become: yes
+    become_user: root
+    notify:
+      - Restart postgres
+
+  - name: Create Postgres DB
+    postgresql_db:
+      name: bucketlist_dev
+    become: yes
+    become_user: root
+
+  - name: Run migrations
+    command: python manage.py db upgrade
+    args:
+      chdir: app/
+
+  - name: Create socket file
+    shell: |
+      touch bucketlist.sock
+      chmod 666 bucketlist.sock
+    args:
+      chdir: app/
+      executable: /bin/bash
+
+  - name: Generate JS assets
+    shell: |
+      cd /bucketlist/client
+      bower install
+      npm install
+      ng build
+    args:
+      chdir: app/
+      executable: /bin/bash
+
+  handlers:
+    - name: Restart postgres
+      service: name=postgresql state=restarted
