@@ -2,7 +2,8 @@
 
 sudo apt-get update
 sudo apt-get -y install ansible git
-sudo apt-get -y install nodejs npm
+sudo apt-get -y install npm
+sudo npm install -g n
 sudo apt-get -y install python-pip python-dev build-essential libpq-dev
 sudo pip install --upgrade pip
 sudo pip install --upgrade virtualenv
