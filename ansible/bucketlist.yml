@@ -1,6 +1,10 @@
 ---
 - hosts: bucketlist
   remote_user: root
+  environment:
+    DATABASE_URL: postgresql://postgres:pass@localhost:5432/bucketlist_dev
+    BUCKETLIST_ENV: development
+
   tasks:
   - name: Install nginx, postgres and uwsgi
     apt:
@@ -22,6 +26,15 @@
     file:
       path=/etc/nginx/sites-available/bucketlist
       src=/etc/nginx/sites-enabled
+      state=link
+      force=yes
+    become: yes
+    become_user: root
+  
+  - name: Create symlink to nodejs
+    file:
+      path=/usr/bin/node
+      src=/usr/bin/nodejs
       state=link
       force=yes
     become: yes
@@ -51,10 +64,10 @@
     become: yes
     become_user: root
   
-  - name: Copy configuration files to virtual machine
+  - name: Copy app.ini and wsgi.py configurations to virtual machine
     template:
-      src=templates/app.ini dest=/app/app.ini
-      src=templates/wsgi.py dest=/app/wsgi.py
+      src=templates/app.ini dest=/home/vagrant/app/app.ini
+      src=templates/wsgi.py dest=/home/vagrant/app/wsgi.py
     become: yes
     become_user: root
 
@@ -75,28 +88,39 @@
   - name: Create Postgres DB
     postgresql_db:
       name: bucketlist_dev
+      state: present
     become: yes
-    become_user: root
-
+    become_user: postgres
+  
+  - name: Grant user postgres access to database
+    postgresql_user:
+      db: bucketlist_dev
+      name: postgres
+      password: pass
+      priv: ALL
+    become: yes
+    become_user: postgres
+      
   - name: Run migrations
     command: python manage.py db upgrade
     args:
       chdir: app/
 
   - name: Create socket file
-    shell: |
-      touch bucketlist.sock
-      chmod 666 bucketlist.sock
-    args:
-      chdir: app/
-      executable: /bin/bash
+    file:
+      path: /app/bucketlist.sock
+      owner: root
+      mode: 666
+      state: touch
+    become: yes
+    become_user: root
 
   - name: Generate JS assets
     shell: |
-      cd /bucketlist/client
+      cd bucketlist/client
       bower install
       npm install
-      ng build
+      npm run build
     args:
       chdir: app/
       executable: /bin/bash
