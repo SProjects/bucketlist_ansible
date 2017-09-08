@@ -58,11 +58,14 @@
       state: directory
       mode: 0755
       owner: vagrant
+      group: vagrant
 
   - name: Clone the bucketlist app from github
     git:
       repo: https://github.com/SProjects/bucketlist_andela.git
       dest: app/
+    become: yes
+    become_user: vagrant
   
   - name: Copy app.ini configurations to virtual machine
     template:
@@ -71,6 +74,13 @@
   - name: Copy wsgi.py configurations to virtual machine
     template:
       src=templates/wsgi.py dest=/home/vagrant/app/wsgi.py
+
+  - name: Create uwgi bucketlist logging file
+    file:
+      path: /var/log/uwsgi/bucketlist.log
+      state: touch
+      mode: 0750
+      owner: root
   
   - name: Create virtual environment and install requirements
     shell: | 
@@ -86,7 +96,7 @@
     template:
       src=templates/bucketlist.conf dest=/etc/init/bucketlist.conf
     notify:
-      - Restart uwsgi
+      - Start uwsgi
 
   - name: Create Postgres DB
     postgresql_db:
@@ -115,14 +125,22 @@
     args:
       chdir: app/
       executable: /bin/bash
+    notify:
+      - Restart postgres
+      - Restart uwsgi
+      - Restart nginx
 
   handlers:
     - name: Restart postgres
       service: name=postgresql state=restarted
     
+    - name: Start uwsgi
+      shell: | 
+        start bucketlist
+
     - name: Restart uwsgi
       shell: | 
-        sudo start bucketlist
+        restart bucketlist
     
     - name: Restart nginx
       service: name=nginx state=restarted
