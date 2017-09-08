@@ -1,6 +1,7 @@
 ---
 - hosts: bucketlist
-  remote_user: root
+  become_user: root
+  become: yes
   environment:
     DATABASE_URL: postgresql://postgres:pass@localhost:5432/bucketlist_dev
     BUCKETLIST_ENV: development
@@ -15,7 +16,7 @@
     - postgresql
     - uwsgi
   
-  - name: Start nginx, postgresql and uwsgi
+  - name: Install and start nginx, postgresql and uwsgi
     service: 
       name: "{{ item }}" 
       state: started 
@@ -24,32 +25,30 @@
     - nginx
     - postgresql
     - uwsgi
-    become: yes
-    become_user: root
+  
+  - name: Disable default nginx site
+    file: 
+      path: /etc/nginx/sites-enabled/default 
+      state: absent
+    notify:
+      - Restart nginx
 
   - name: Configure nginx
     template:
       src: templates/bucketlist
       dest: /etc/nginx/sites-available/bucketlist
-    become: yes
-    become_user: root
   
   - name: Add bucketlist to site-enabled
     file:
-      path=/etc/nginx/sites-enabled
+      path=/etc/nginx/sites-enabled/bucketlist
       src=/etc/nginx/sites-available/bucketlist
       state=link
       force=yes
-    become: yes
-    become_user: root
     notify:
-      - Restart uwsgi
       - Restart nginx
   
   - name: Copy Postgres configurations
     template: src=templates/pg_hba.conf dest=/etc/postgresql/9.3/main/pg_hba.conf
-    become: yes
-    become_user: root
     notify:
       - Restart postgres
   
@@ -64,28 +63,31 @@
     git:
       repo: https://github.com/SProjects/bucketlist_andela.git
       dest: app/
-    become: yes
-    become_user: root
   
   - name: Copy app.ini configurations to virtual machine
     template:
       src=templates/app.ini dest=/home/vagrant/app/app.ini
-    become: yes
-    become_user: root
   
   - name: Copy wsgi.py configurations to virtual machine
     template:
       src=templates/wsgi.py dest=/home/vagrant/app/wsgi.py
-    become: yes
-    become_user: root
-
-  - name: Install requirements
-    command: pip install -r requirements.txt
+  
+  - name: Create virtual environment and install requirements
+    shell: | 
+      virtualenv venv
+      source venv/bin/activate
+      pip install -r requirements.txt
+      pip install uwsgi
     args:
       chdir: app/
-    become: yes
-    become_user: root
-  
+      executable: /bin/bash
+
+  - name: Copy uwsgi configuration to virtual machine
+    template:
+      src=templates/bucketlist.conf dest=/etc/init/bucketlist.conf
+    notify:
+      - Restart uwsgi
+
   - name: Create Postgres DB
     postgresql_db:
       name: bucketlist_dev
@@ -94,7 +96,7 @@
       login_password: pass
     become: yes
     become_user: postgres
-  
+
   - name: Grant user postgres access to database
     postgresql_user:
       db: bucketlist_dev
@@ -107,25 +109,9 @@
     become_user: postgres
       
   - name: Run migrations
-    command: python manage.py db upgrade
-    args:
-      chdir: app/
-
-  - name: Create socket file
-    file:
-      path: /app/bucketlist.sock
-      owner: root
-      mode: 666
-      state: touch
-    become: yes
-    become_user: root
-
-  - name: Generate JS assets
-    shell: |
-      cd bucketlist/client
-      bower install
-      npm install
-      npm run build
+    shell: | 
+      source venv/bin/activate
+      python manage.py db upgrade
     args:
       chdir: app/
       executable: /bin/bash
@@ -135,7 +121,8 @@
       service: name=postgresql state=restarted
     
     - name: Restart uwsgi
-      service: name=uwsgi state=restarted
+      shell: | 
+        sudo start bucketlist
     
     - name: Restart nginx
       service: name=nginx state=restarted

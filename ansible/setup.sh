@@ -7,7 +7,7 @@ sudo npm install -g n
 sudo apt-get -y install python-pip python-dev build-essential libpq-dev
 sudo pip install --upgrade pip
 sudo pip install --upgrade virtualenv
-sudo pip install uwsgi
+sudo pip install psycopg2
 sudo npm install -g bower
 
 # Connect nginx to uwsgi
