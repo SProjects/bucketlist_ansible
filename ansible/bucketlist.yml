@@ -95,9 +95,7 @@
   - name: Copy uwsgi configuration to virtual machine
     template:
       src=templates/bucketlist.conf dest=/etc/init/bucketlist.conf
-    notify:
-      - Start uwsgi
-
+  
   - name: Create Postgres DB
     postgresql_db:
       name: bucketlist_dev
@@ -127,17 +125,12 @@
       executable: /bin/bash
     notify:
       - Restart postgres
-      - Restart uwsgi
       - Restart nginx
 
   handlers:
     - name: Restart postgres
       service: name=postgresql state=restarted
     
-    - name: Start uwsgi
-      shell: | 
-        start bucketlist
-
     - name: Restart uwsgi
       shell: | 
         restart bucketlist
