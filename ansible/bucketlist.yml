@@ -1,22 +1,21 @@
 ---
 - hosts: bucketlist
-  become_user: root
   become: yes
+  become_user: root
   environment:
-    DATABASE_URL: postgresql://postgres:pass@localhost:5432/bucketlist_dev
-    BUCKETLIST_ENV: development
+    DATABASE_URL: postgresql://postgres:pass@localhost:5432/bucketlist_stage
+    BUCKETLIST_ENV: staging
 
   tasks:
-  - name: Install nginx, postgres and uwsgi
+  - name: Install nginx and postgres
     apt:
       name: "{{ item }}"
       state: present
     with_items:
     - nginx
     - postgresql
-    - uwsgi
   
-  - name: Install and start nginx, postgresql and uwsgi
+  - name: Start nginx and postgresql
     service: 
       name: "{{ item }}" 
       state: started 
@@ -24,7 +23,6 @@
     with_items:
     - nginx
     - postgresql
-    - uwsgi
   
   - name: Disable default nginx site
     file: 
@@ -95,10 +93,12 @@
   - name: Copy uwsgi configuration to virtual machine
     template:
       src=templates/bucketlist.conf dest=/etc/init/bucketlist.conf
+    notify:
+      - Start uwsgi
   
   - name: Create Postgres DB
     postgresql_db:
-      name: bucketlist_dev
+      name: bucketlist_stage
       state: present
       login_user: postgres
       login_password: pass
@@ -107,7 +107,7 @@
 
   - name: Grant user postgres access to database
     postgresql_user:
-      db: bucketlist_dev
+      db: bucketlist_stage
       name: postgres
       password: pass
       priv: ALL
@@ -131,9 +131,9 @@
     - name: Restart postgres
       service: name=postgresql state=restarted
     
-    - name: Restart uwsgi
+    - name: Start uwsgi
       shell: | 
-        restart bucketlist
+        start bucketlist
     
     - name: Restart nginx
       service: name=nginx state=restarted
