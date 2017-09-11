@@ -11,7 +11,7 @@
     BUCKETLIST_ENV: staging
 
   tasks:
-  - name: Install nginx and postgres
+  - name: Install dependencies
     apt:
       name: "{{ item }}"
       state: present
@@ -19,6 +19,13 @@
     - nginx
     - postgresql
     - uwsgi
+
+  - name: Install nodejs &  npm
+    shell: |
+      curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
+      sudo apt-get install -y nodejs
+    args:
+      executable: /bin/bash
 
   - name: Start nginx and postgresql
     service: 
@@ -138,6 +145,29 @@
     notify:
       - Restart postgres
       - Restart nginx
+  
+  #  - name: Install nvm
+  #    shell: | 
+  #      if [ ! -d /home/vagrant/.nvm ]; then
+  #        curl https://raw.githubusercontent.com/creationix/nvm/v0.33.4/install.sh | bash
+  #        source ~/.profile
+  #      fi
+  #      source ~/.bashrc
+  #      nvm install 8.4.0
+  #    args:
+  #      executable: /bin/bash
+  #    become: yes
+  #    become_user: vagrant
+
+  - name: Generate JS assets
+    shell: | 
+      npm install
+      npm run build
+    args:
+      chdir: /home/vagrant/app/bucketlist/client
+      executable: /bin/bash
+    become: yes
+    become_user: vagrant
 
   handlers:
     - name: Restart postgres
