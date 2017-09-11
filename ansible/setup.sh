@@ -3,7 +3,7 @@
 sudo apt-get update
 sudo apt-get -y install ansible git curl
 
-sudo apt-get -y install python-pip python-dev build-essential libpq-dev
+sudo apt-get -y install python-pip python-dev build-essential libpq-dev libssl-dev
 sudo pip install --upgrade pip
 sudo pip install --upgrade virtualenv
 sudo pip install psycopg2

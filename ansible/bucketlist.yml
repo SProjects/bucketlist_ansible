@@ -2,6 +2,10 @@
 - hosts: bucketlist
   become: yes
   become_user: root
+  vars:
+    nvm_version: 0.33.4
+    nvm_node_version: 8.4.0
+    nvm_user: vagrant
   environment:
     DATABASE_URL: postgresql://postgres:pass@localhost:5432/bucketlist_stage
     BUCKETLIST_ENV: staging
@@ -14,7 +18,8 @@
     with_items:
     - nginx
     - postgresql
-  
+    - uwsgi
+
   - name: Start nginx and postgresql
     service: 
       name: "{{ item }}" 
@@ -23,7 +28,8 @@
     with_items:
     - nginx
     - postgresql
-  
+    - uwsgi
+
   - name: Disable default nginx site
     file: 
       path: /etc/nginx/sites-enabled/default 
@@ -35,7 +41,7 @@
     template:
       src: templates/bucketlist
       dest: /etc/nginx/sites-available/bucketlist
-  
+
   - name: Add bucketlist to site-enabled
     file:
       path=/etc/nginx/sites-enabled/bucketlist
@@ -44,12 +50,12 @@
       force=yes
     notify:
       - Restart nginx
-  
+
   - name: Copy Postgres configurations
     template: src=templates/pg_hba.conf dest=/etc/postgresql/9.3/main/pg_hba.conf
     notify:
       - Restart postgres
-  
+
   - name: Create app folder
     file:
       path: app/
@@ -62,13 +68,18 @@
     git:
       repo: https://github.com/SProjects/bucketlist_andela.git
       dest: app/
+      force: yes
     become: yes
     become_user: vagrant
-  
+
+  - name: Copy frontend config file
+    template:
+      src=templates/app.config.ts dest=/home/vagrant/app/bucketlist/client/src/app/app.config.ts
+
   - name: Copy app.ini configurations to virtual machine
     template:
       src=templates/app.ini dest=/home/vagrant/app/app.ini
-  
+
   - name: Copy wsgi.py configurations to virtual machine
     template:
       src=templates/wsgi.py dest=/home/vagrant/app/wsgi.py
@@ -79,7 +90,8 @@
       state: touch
       mode: 0750
       owner: root
-  
+      force: yes
+
   - name: Create virtual environment and install requirements
     shell: | 
       virtualenv venv
@@ -95,7 +107,7 @@
       src=templates/bucketlist.conf dest=/etc/init/bucketlist.conf
     notify:
       - Start uwsgi
-  
+
   - name: Create Postgres DB
     postgresql_db:
       name: bucketlist_stage
@@ -115,7 +127,7 @@
       login_password: pass
     become: yes
     become_user: postgres
-      
+
   - name: Run migrations
     shell: | 
       source venv/bin/activate
@@ -130,10 +142,10 @@
   handlers:
     - name: Restart postgres
       service: name=postgresql state=restarted
-    
+
     - name: Start uwsgi
       shell: | 
         start bucketlist
-    
+
     - name: Restart nginx
       service: name=nginx state=restarted
